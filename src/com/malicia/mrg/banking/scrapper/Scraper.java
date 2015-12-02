@@ -31,33 +31,20 @@ public class Scraper {
 	static Integer nbcpt = 0;
 	static Integer nbtran = 0;
 	private static Properties props;
+	private static Properties propssecret;
 
 	public static void main(String[] args) {
 
 		try {
 			props = new Properties();
 			InputStream in = null;
-
-			String path = System.getProperty("user.home") + File.separator;
-
-			in = Scraper.class.getResourceAsStream("." + File.separator + ".." + File.separator + ".secret" + File.separator + "ing.pass.properties");
-			if (in == null) {
-				in = Scraper.class.getResourceAsStream(path + ".secret" + File.separator + "ing.pass.properties");
-				if (in == null) {
-					in = Scraper.class.getResourceAsStream(path + "ing.pass.properties");
-					if (in == null) {
-						in = Scraper.class.getResourceAsStream("." + File.separator + ".." + File.separator + ".." + File.separator + ".secret" + File.separator + "ing.pass.properties");
-						if (in == null) {
-							in = Scraper.class.getResourceAsStream("ing.pass.properties");
-							if (in == null) {
-								System.out.println("Sorry, unable to find " + "ing.pass.properties");
-								return;
-							}
-						}
-					}
-				}
-			}
+			in = Scraper.class.getResourceAsStream("/app.properties");
 			props.load(in);
+
+			propssecret = new Properties();
+			InputStream insecret = null;
+			insecret = Scraper.class.getResourceAsStream(props.getProperty("repertoire_secret") + "ing.pass.properties");
+			propssecret.load(insecret);
 
 			WebDriver driver = new FirefoxDriver();
 
@@ -74,9 +61,9 @@ public class Scraper {
 			// File("/path/to/chromedriver.log")) .withSilent(true)
 			// .usingAnyFreePort() .build();
 
-			String username = props.getProperty("ing.username");
-			String password = props.getProperty("ing.password");
-			String passcode = props.getProperty("ing.passcode");
+			char[] username = props.getProperty("ing.username").toCharArray();
+			char[] password = props.getProperty("ing.password").toCharArray();
+			char[] passcode = props.getProperty("ing.passcode").toCharArray();
 
 			String url = props.getProperty("ing.url");
 			gotourl(driver, url);
@@ -85,7 +72,7 @@ public class Scraper {
 
 			validefirstscreen(driver);
 
-			String secpass = getpasscode(driver, passcode);
+			char[] secpass = getpasscode(driver, passcode);
 
 			WebElement webelementkeypad = getkeypad(driver);
 
@@ -101,6 +88,11 @@ public class Scraper {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+
+	}
+
+	private static void setuserdob(WebDriver driver, char[] username, char[] password) {
+		// TODO Auto-generated method stub
 
 	}
 
@@ -130,7 +122,8 @@ public class Scraper {
 
 				System.out.println("compte_account_number" + ":" + compte_account_number);
 
-				PrintWriter writer = new PrintWriter(compte_account_number + " " + DateToStr + ".qif", "UTF-8");
+				PrintWriter writer = new PrintWriter(Scraper.class.getResourceAsStream(props.getProperty("repertoire_secret")) + compte_account_number + " " + DateToStr + ".qif",
+						"UTF-8");
 
 				writer.println("!Type:Bank");
 				nbcpt++;
@@ -151,6 +144,9 @@ public class Scraper {
 				}
 				writer.close();
 			}
+			PrintWriter writer = new PrintWriter("tweet_sysout.txt", "UTF-8");
+			writer.println(nbcpt + " compte et " + nbtran + "transaction recuperées");
+			writer.close();
 
 		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block ² ²
@@ -215,20 +211,20 @@ public class Scraper {
 		return keypadele;
 	}
 
-	private static String getpasscode(WebDriver driver, String passcode) {
+	private static char[] getpasscode(WebDriver driver, char[] passcode) {
 		System.out.println("getpasscode" + ":");// +passcode);
 		WebElement pinpad = ((WebDriver) driver).findElement(By.id("digitpaddisplayLogin"));
 		List<WebElement> sequence = pinpad.findElements(By.xpath(".//*"));
-		String secpass = "";
+		char[] secpass = null;
 		int i = 1;
 		for (WebElement e : sequence) {
 			if (!e.getAttribute("class").equals("plein")) {
-				secpass += passcode.substring(i - 1, i);
+				secpass[secpass.length] = passcode[i];// substring(i - 1, i);
 			}
 			;
 			i++;
 		}
-		System.out.println(secpass);
+		// System.out.println(secpass);
 		return secpass;
 	}
 
@@ -278,8 +274,8 @@ public class Scraper {
 
 	}
 
-	public static String clickClavierMobile(String SequentielPass, WebDriver driver, WebElement elementkeypad_img) {
-		System.out.println("clickClavierMobile" + ":" + SequentielPass);
+	public static String clickClavierMobile(char[] SequentielPass, WebDriver driver, WebElement elementkeypad_img) {
+		System.out.println("clickClavierMobile" + ":");// + SequentielPass);
 		try {
 			String ret = "";
 
@@ -290,13 +286,17 @@ public class Scraper {
 			BufferedImage img2 = WebElementExtender.captureElementPicture(elementkeypad_img);
 			// display(img2);
 
-			for (int l = 0; l <= SequentielPass.length() - 1; ++l) {
+			for (int l = 0; l <= SequentielPass.length - 1; ++l) {
 				int y1 = 0;
 				int x1 = 0;
 				Integer[] y = new Integer[] { 2, 1, 1, 1, 2, 2, 2, 2, 1, 1 };
 				Integer[] x = new Integer[] { 5, 2, 5, 1, 4, 1, 3, 2, 3, 4 };
-				y1 = y[Integer.parseInt(SequentielPass.substring(l, l + 1))];
-				x1 = x[Integer.parseInt(SequentielPass.substring(l, l + 1))];
+				// y1 = y[Integer.parseInt(SequentielPass[l]];//.substring(l, l
+				// + 1))];
+				// x1 = x[Integer..parseInt(SequentielPass[l])];//.substring(l,
+				// l + 1))];
+				y1 = y[SequentielPass[l]];// .substring(l, l + 1))];
+				x1 = x[SequentielPass[l]];// .substring(l, l + 1))];
 				int w = 15;
 				int h = 15;
 				int taille = 40;
@@ -319,7 +319,7 @@ public class Scraper {
 								ret += complement + xclick + "," + yclick;
 								Actions builder = new Actions((WebDriver) driver);
 								builder.moveToElement(elementkeypad_img, xclick, yclick).click().build().perform();
-								System.out.println(SequentielPass.substring(l, l + 1) + " " + xclick + "*" + yclick + " " + y1 + "-" + x1 + "/" + y2 + "-" + x2 + "=" + res);
+								//System.out.println(SequentielPass.substring(l, l + 1) + " " + xclick + "*" + yclick + " " + y1 + "-" + x1 + "/" + y2 + "-" + x2 + "=" + res);
 								getout = true;
 							}
 						}
