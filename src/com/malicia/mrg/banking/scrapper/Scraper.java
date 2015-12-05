@@ -2,7 +2,9 @@ package com.malicia.mrg.banking.scrapper;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -12,6 +14,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import javax.imageio.ImageIO;
 import javax.swing.BoxLayout;
@@ -20,11 +23,18 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.WindowConstants;
+
+import org.apache.commons.lang3.SystemUtils;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.interactions.Actions;
+import org.openqa.selenium.support.ui.ExpectedCondition;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.Wait;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 public class Scraper {
 
@@ -32,6 +42,7 @@ public class Scraper {
 	static Integer nbtran = 0;
 	private static Properties props;
 	private static Properties propssecret;
+	static WebDriverWait wait;
 
 	public static void main(String[] args) {
 
@@ -40,14 +51,20 @@ public class Scraper {
 			InputStream in = null;
 			in = Scraper.class.getResourceAsStream("/app.properties");
 			props.load(in);
-
 			propssecret = new Properties();
-			InputStream insecret = null;
-			insecret = Scraper.class.getResourceAsStream(props.getProperty("repertoire_secret") + "ing.pass.properties");
-			propssecret.load(insecret);
+
+			String rep = props.getProperty("repertoire_secret");
+			if (SystemUtils.IS_OS_WINDOWS) {
+				rep = rep.replace("~", System.getProperty("user.home"));
+				rep = rep.replace("/", "\\");
+			}
+			;
+			rep = rep + "ing.pass.properties";
+			propssecret.load(new FileInputStream(rep));
 
 			WebDriver driver = new FirefoxDriver();
-
+			driver.manage().timeouts().pageLoadTimeout(60, TimeUnit.SECONDS);
+			wait = new WebDriverWait(driver, 20);
 			// HtmlUnitDriver driver = new
 			// HtmlUnitDriver(BrowserVersion.FIREFOX_38);
 
@@ -61,11 +78,11 @@ public class Scraper {
 			// File("/path/to/chromedriver.log")) .withSilent(true)
 			// .usingAnyFreePort() .build();
 
-			char[] username = props.getProperty("ing.username").toCharArray();
-			char[] password = props.getProperty("ing.password").toCharArray();
-			char[] passcode = props.getProperty("ing.passcode").toCharArray();
+			char[] username = propssecret.getProperty("ing.username").toCharArray();
+			char[] password = propssecret.getProperty("ing.password").toCharArray();
+			char[] passcode = propssecret.getProperty("ing.passcode").toCharArray();
 
-			String url = props.getProperty("ing.url");
+			String url = propssecret.getProperty("ing.url");
 			gotourl(driver, url);
 
 			setuserdob(driver, username, password);
@@ -92,8 +109,16 @@ public class Scraper {
 	}
 
 	private static void setuserdob(WebDriver driver, char[] username, char[] password) {
-		// TODO Auto-generated method stub
-
+		// Find the text input element by its name
+		try {
+			getWaitElement(driver, By.id("zone1Form:numClient")).sendKeys(String.copyValueOf(username));
+			getWaitElement(driver, By.id("zone1Form:dateDay")).sendKeys(String.copyValueOf(password).substring(0, 2));
+			getWaitElement(driver, By.id("zone1Form:dateMonth")).sendKeys(String.copyValueOf(password).substring(2, 4));
+			getWaitElement(driver, By.id("zone1Form:dateYear")).sendKeys(String.copyValueOf(password).substring(4, 8));
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	private static void closebrowser(WebDriver driver) {
@@ -122,14 +147,14 @@ public class Scraper {
 
 				System.out.println("compte_account_number" + ":" + compte_account_number);
 
-				PrintWriter writer = new PrintWriter(Scraper.class.getResourceAsStream(props.getProperty("repertoire_secret")) + compte_account_number + " " + DateToStr + ".qif",
+				PrintWriter writer = new PrintWriter(compte_account_number + " " + DateToStr + ".qif",
 						"UTF-8");
 
 				writer.println("!Type:Bank");
 				nbcpt++;
 
 				compte.click();
-				Thread.sleep(5000);
+				waitForPageLoaded(driver);
 
 				for (WebElement item : ((WebDriver) driver).findElements(By.className("isotope-item"))) {
 					String item_date = stringToDateToString(getWaitElement(item, By.xpath(".//span[@n='o']")).getAttribute("innerHTML"));
@@ -145,7 +170,7 @@ public class Scraper {
 				writer.close();
 			}
 			PrintWriter writer = new PrintWriter("tweet_sysout.txt", "UTF-8");
-			writer.println(nbcpt + " compte et " + nbtran + "transaction recuperées");
+			writer.println(nbcpt + " compte et " + nbtran + " transaction recuperées");
 			writer.close();
 
 		} catch (FileNotFoundException e) {
@@ -183,9 +208,25 @@ public class Scraper {
 			// TODO Auto-generated method stub
 			// mrc:mrg
 			getWaitElement(driver, By.id("mrc:mrg")).click();
-
-			Thread.sleep(5000);
+			waitForPageLoaded(driver);
+			
 		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+	public static void waitForPageLoaded(WebDriver driver) throws InterruptedException {
+		Thread.sleep(5000);
+		ExpectedCondition<Boolean> expectation = new ExpectedCondition<Boolean>() {
+			public Boolean apply(WebDriver driver) {
+				return ((JavascriptExecutor) driver).executeScript("return document.readyState").equals("complete");
+			}
+		};
+		Wait<WebDriver> wait = new WebDriverWait(driver, 30);
+		try {
+			wait.until(expectation);
+		} catch (Throwable e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
@@ -213,13 +254,16 @@ public class Scraper {
 
 	private static char[] getpasscode(WebDriver driver, char[] passcode) {
 		System.out.println("getpasscode" + ":");// +passcode);
+
 		WebElement pinpad = ((WebDriver) driver).findElement(By.id("digitpaddisplayLogin"));
 		List<WebElement> sequence = pinpad.findElements(By.xpath(".//*"));
-		char[] secpass = null;
-		int i = 1;
+		char[] secpass = new char[] { 1, 2, 3 };
+		int i = 0;
+		int ii = 0;
 		for (WebElement e : sequence) {
 			if (!e.getAttribute("class").equals("plein")) {
-				secpass[secpass.length] = passcode[i];// substring(i - 1, i);
+				secpass[ii] = passcode[i];// substring(i - 1, i);
+				ii++;
 			}
 			;
 			i++;
@@ -233,6 +277,7 @@ public class Scraper {
 		// Now submit the form. WebDriver will find the form for us from the
 		// element
 		getWaitElement(driver, By.id("zone1Form:submit")).click();
+		waitForPageLoaded(driver);
 
 	}
 
@@ -253,6 +298,7 @@ public class Scraper {
 			Thread.sleep(1000);
 		}
 		WebElement element = ((WebDriver) driver).findElement(searchBy);
+
 		return element;
 	}
 
@@ -295,8 +341,14 @@ public class Scraper {
 				// + 1))];
 				// x1 = x[Integer..parseInt(SequentielPass[l])];//.substring(l,
 				// l + 1))];
-				y1 = y[SequentielPass[l]];// .substring(l, l + 1))];
-				x1 = x[SequentielPass[l]];// .substring(l, l + 1))];
+				y1 = y[Integer.valueOf(String.valueOf(SequentielPass[l]))];// .substring(l,
+																			// l
+																			// +
+																			// 1))];
+				x1 = x[Integer.valueOf(String.valueOf(SequentielPass[l]))];// .substring(l,
+																			// l
+																			// +
+																			// 1))];
 				int w = 15;
 				int h = 15;
 				int taille = 40;
@@ -319,7 +371,10 @@ public class Scraper {
 								ret += complement + xclick + "," + yclick;
 								Actions builder = new Actions((WebDriver) driver);
 								builder.moveToElement(elementkeypad_img, xclick, yclick).click().build().perform();
-								//System.out.println(SequentielPass.substring(l, l + 1) + " " + xclick + "*" + yclick + " " + y1 + "-" + x1 + "/" + y2 + "-" + x2 + "=" + res);
+								// System.out.println(SequentielPass.substring(l,
+								// l + 1) + " " + xclick + "*" + yclick + " " +
+								// y1 + "-" + x1 + "/" + y2 + "-" + x2 + "=" +
+								// res);
 								getout = true;
 							}
 						}
