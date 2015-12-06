@@ -54,8 +54,8 @@ public class Scraper {
 			propssecret = new Properties();
 
 			String rep = props.getProperty("repertoire_secret");
+			rep = rep.replace("~", System.getProperty("user.home"));
 			if (SystemUtils.IS_OS_WINDOWS) {
-				rep = rep.replace("~", System.getProperty("user.home"));
 				rep = rep.replace("/", "\\");
 			}
 			;
