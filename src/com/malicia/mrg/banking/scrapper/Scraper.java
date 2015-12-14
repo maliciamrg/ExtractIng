@@ -27,6 +27,7 @@ import javax.swing.WindowConstants;
 import org.apache.commons.lang3.SystemUtils;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.firefox.FirefoxDriver;
@@ -111,10 +112,13 @@ public class Scraper {
 	private static void setuserdob(WebDriver driver, char[] username, char[] password) {
 		// Find the text input element by its name
 		try {
-			getWaitElement(driver, By.id("zone1Form:numClient")).sendKeys(String.copyValueOf(username));
-			getWaitElement(driver, By.id("zone1Form:dateDay")).sendKeys(String.copyValueOf(password).substring(0, 2));
-			getWaitElement(driver, By.id("zone1Form:dateMonth")).sendKeys(String.copyValueOf(password).substring(2, 4));
-			getWaitElement(driver, By.id("zone1Form:dateYear")).sendKeys(String.copyValueOf(password).substring(4, 8));
+			Thread.sleep(500);
+			driver.findElement(By.id("zone1Form:numClient")).click();
+			Thread.sleep(500);
+			driver.findElement(By.id("zone1Form:numClient")).sendKeys(String.copyValueOf(username));
+			driver.findElement(By.id("zone1Form:dateDay")).sendKeys(String.copyValueOf(password).substring(0, 2));
+			driver.findElement(By.id("zone1Form:dateMonth")).sendKeys(String.copyValueOf(password).substring(2, 4));
+			driver.findElement(By.id("zone1Form:dateYear")).sendKeys(String.copyValueOf(password).substring(4, 8));
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -147,7 +151,7 @@ public class Scraper {
 
 				System.out.println("compte_account_number" + ":" + compte_account_number);
 
-				PrintWriter writer = new PrintWriter(compte_account_number + " " + DateToStr + ".qif",
+				PrintWriter writer = new PrintWriter("qif " +compte_account_number + " " +compte_title +" " + DateToStr + ".qif",
 						"UTF-8");
 
 				writer.println("!Type:Bank");
@@ -170,7 +174,7 @@ public class Scraper {
 				writer.close();
 			}
 			PrintWriter writer = new PrintWriter("tweet_sysout.txt", "UTF-8");
-			writer.println(nbcpt + " compte et " + nbtran + " transaction recuperées");
+			writer.println(nbcpt + " comptes et " + nbtran + " transactions recuperées");
 			writer.close();
 
 		} catch (FileNotFoundException e) {
@@ -276,7 +280,19 @@ public class Scraper {
 		System.out.println("validefirstscreen" + ":");
 		// Now submit the form. WebDriver will find the form for us from the
 		// element
-		getWaitElement(driver, By.id("zone1Form:submit")).click();
+		
+		WebElement a = driver.findElement(By.id("zone1Form:submit"));
+//		new Actions(driver).sendKeys(a, Keys.ENTER).perform();
+//		new Actions(driver).moveToElement(a).sendKeys(Keys.ENTER).perform();
+		a.sendKeys(Keys.ENTER);
+//		new Actions(driver).moveToElement(a).perform();;
+//		new Actions(driver).moveToElement(a).doubleClick().perform();;
+//		new Actions(driver).click(a).perform();
+		//driver.findElement(By.id("zone1Form:submit")).click();
+
+//		getWaitElement(driver, By.id("zone1Form:submit")).click();
+		//WebElement ba = getWaitElement(driver, By.id("zone1Form:submit"));
+		//a.click();
 		waitForPageLoaded(driver);
 
 	}
