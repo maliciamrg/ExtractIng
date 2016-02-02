@@ -7,14 +7,19 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
+import java.util.ResourceBundle;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,6 +38,7 @@ import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.remote.RemoteWebElement;
@@ -45,25 +51,25 @@ public class Scraper {
 
 	static Integer nbcpt = 0;
 	static Integer nbtran = 0;
-	private static Properties props;
 	private static Properties propssecret;
 	static WebDriverWait wait;
 
-	static infoBank[] Bank = new infoBank[2];
+	static List<InfoCompte> listcompte = new ArrayList<>();
+	static int indicelistcomptecurrent;
+
+	static List<infoBank> Bank = new ArrayList<>();
 
 	public static void main(String[] args) {
 
 		try {
-			props = new Properties();
-			InputStream in = null;
-			in = Scraper.class.getResourceAsStream("/app.properties");
-			props.load(in);
 
 			GetParamBank(Bank);
+			System.setProperty("webdriver.chrome.driver", "chromedriver.exe");
 
+			listcompte = readDataFiles();
 			for (infoBank bk : Bank) {
-
-				WebDriver driver = new FirefoxDriver();
+				WebDriver driver = new ChromeDriver();
+				// WebDriver driver = new FirefoxDriver();
 				driver.manage().timeouts().pageLoadTimeout(60, TimeUnit.SECONDS);
 				wait = new WebDriverWait(driver, 20);
 				// HtmlUnitDriver driver = new
@@ -102,21 +108,117 @@ public class Scraper {
 
 				validesecondscreen(driver, bk);
 
-				if (bk.title.equals("ing")) {
-					bankscraping(driver);
-				}
-				if (bk.title.equals("boursorama")) {
-					bankscrapboursorama(driver);
-				}
+				allBankgrab(bk, driver);
 
 				closebrowser(driver);
 			}
+
+			writeFiles(listcompte);
+			writeDataFiles(listcompte);
 
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
+	}
+
+	private static void allBankgrab(infoBank bk, WebDriver driver) {
+		System.out.println("bankscrap" + ":");
+		// TODO Auto-generated method stub
+		Date curDate = new Date();
+		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
+		String DateToStr = format.format(curDate);
+
+		if (bk.title.equals("ing")) {
+			bankscraping(driver);
+		}
+		if (bk.title.equals("boursorama")) {
+			bankscrapboursorama(driver);
+		}
+	}
+
+	private static void writeFiles(List<InfoCompte> listcompte2) {
+
+		PrintWriter writer;
+		nbcpt = 0;
+		nbtran = 0;
+		for (InfoCompte cpt : listcompte2) {
+			if (cpt.getNbNouvelleTransaction() > 0) {
+				nbcpt++;
+				Collections.sort(cpt.trans);
+				System.out.println("compte_account_number" + ":" + cpt.compte_account_number + " => "
+						+ cpt.getNbNouvelleTransaction());
+				try {
+					System.out.println(cpt.getNomFichier());
+					// File fout = new File(nfout, "UTF-8");
+					File fout = new File(cpt.getNomFichier());
+					boolean newfile = false;
+					if (!fout.exists()) {
+						fout.createNewFile();
+						newfile = true;
+					} else {
+
+					}
+					writer = new PrintWriter(
+							new FileOutputStream(fout, true /* append = true */));
+					if (newfile) {
+						writer.println("!Type:Bank");
+					}
+					Collections.sort(cpt.trans);
+					for (String tr : cpt.trans) {
+						nbtran++;
+						String[] trsplit = tr.split("#");
+						writer.println("D" + trsplit[0]);
+						writer.println("P" + trsplit[2]);
+						writer.println("T" + trsplit[1]);
+						writer.println("^");
+					}
+					writer.close();
+
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
+			}
+		}
+		if (nbtran > 0) {
+			try {
+				writer = new PrintWriter("tweet_sysout.txt", "UTF-8");
+				writer.println(nbcpt + " comptes et " + nbtran + " transactions recuperees");
+				writer.close();
+			} catch (FileNotFoundException | UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
+
+	private static void writeDataFiles(List<InfoCompte> listcpt) {
+		try {
+			FileOutputStream fos = new FileOutputStream("InfoCompteData.data");
+			ObjectOutputStream oos = new ObjectOutputStream(fos);
+			oos.writeObject(listcpt);
+			oos.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+	private static List<InfoCompte> readDataFiles() {
+		List<InfoCompte> listcompte2 = new ArrayList();
+		FileInputStream fis;
+		try {
+			fis = new FileInputStream("InfoCompteData.data");
+			ObjectInputStream ois = new ObjectInputStream(fis);
+			listcompte2 = (List<InfoCompte>) ois.readObject();
+			ois.close();
+		} catch (IOException | ClassNotFoundException e) {
+			e.printStackTrace();
+		}
+		return listcompte2;
 	}
 
 	private static WebElement getkeypading(WebDriver driver) {
@@ -215,10 +317,13 @@ public class Scraper {
 			Thread.sleep(500);
 			driver.findElement(By.id(bk.loggintextbox)).sendKeys(String.copyValueOf(bk.username));
 
-			if (String.copyValueOf(bk.password).replaceAll("\"", "").length()!=0) {
-				driver.findElement(By.id("zone1Form:dateDay")).sendKeys(String.copyValueOf(bk.password).substring(0, 2));
-				driver.findElement(By.id("zone1Form:dateMonth")).sendKeys(String.copyValueOf(bk.password).substring(2, 4));
-				driver.findElement(By.id("zone1Form:dateYear")).sendKeys(String.copyValueOf(bk.password).substring(4, 8));
+			if (String.copyValueOf(bk.password).replaceAll("\"", "").length() != 0) {
+				driver.findElement(By.id("zone1Form:dateDay"))
+						.sendKeys(String.copyValueOf(bk.password).substring(0, 2));
+				driver.findElement(By.id("zone1Form:dateMonth"))
+						.sendKeys(String.copyValueOf(bk.password).substring(2, 4));
+				driver.findElement(By.id("zone1Form:dateYear"))
+						.sendKeys(String.copyValueOf(bk.password).substring(4, 8));
 			}
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
@@ -232,57 +337,61 @@ public class Scraper {
 	}
 
 	private static void bankscraping(WebDriver driver) {
-		System.out.println("bankscrap" + ":");
-		// TODO Auto-generated method stub
-		Date curDate = new Date();
-		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
-		String DateToStr = format.format(curDate);
 
 		try {
 			Thread.sleep(5000);
 			getWaitElement(driver, By.className("mainclic"));
 
 			for (WebElement compte : ((WebDriver) driver).findElements(By.className("mainclic"))) {
-				String compte_title = getWaitElement(compte, By.className("title")).getAttribute("innerHTML");
-				String compte_lbl = getWaitElement(compte, By.className("lbl")).getAttribute("innerHTML");
-				String compte_account_number = getWaitElement(compte, By.className("account-number")).getAttribute("innerHTML");
-				String compte_account_owner = getWaitElement(compte, By.className("account-owner")).getAttribute("innerHTML");
+
+				InfoCompte currentcpt = new InfoCompte();
+				currentcpt.compte_title = getWaitElement(compte, By.className("title")).getAttribute("innerHTML");
+				currentcpt.compte_lbl = getWaitElement(compte, By.className("lbl")).getAttribute("innerHTML");
+				currentcpt.compte_account_number = getWaitElement(compte, By.className("account-number"))
+						.getAttribute("innerHTML");
+				currentcpt.compte_account_owner = getWaitElement(compte, By.className("account-owner"))
+						.getAttribute("innerHTML");
 				WebElement compte_solde = getWaitElement(compte, By.className("solde"));
-				String compte_solde_digits = getWaitElement(compte_solde, By.className("digits")).getAttribute("innerHTML");
+				String compte_solde_digits = getWaitElement(compte_solde, By.className("digits"))
+						.getAttribute("innerHTML");
 
-				System.out.println("compte_account_number" + ":" + compte_account_number);
+				int indicelistcomptecurrent = -1;
+				for (int i = 0; i < listcompte.size() - 1; i++) {
+					if (listcompte.get(i).compte_account_number.equals(currentcpt.compte_account_number)) {
+						listcompte.get(i).maj(currentcpt);
+						indicelistcomptecurrent = i;
+					}
+				}
+				if (indicelistcomptecurrent == -1) {
+					listcompte.add(currentcpt);
+					indicelistcomptecurrent = listcompte.size() - 1;
+				}
 
-				PrintWriter writer = new PrintWriter("qif " + compte_account_number + " " + compte_title + " " + DateToStr + ".qif", "UTF-8");
-
-				writer.println("!Type:Bank");
-				nbcpt++;
+				// nbcpt++;
 
 				compte.click();
 				waitForPageLoaded(driver);
 
 				for (WebElement item : ((WebDriver) driver).findElements(By.className("isotope-item"))) {
-					String item_date = stringToDateToString(getWaitElement(item, By.xpath(".//span[@n='o']")).getAttribute("innerHTML"));
+					String item_date = stringToDateToString(
+							getWaitElement(item, By.xpath(".//span[@n='o']")).getAttribute("innerHTML"));
 					String item_lbl = getWaitElement(item, By.xpath(".//span[@n='v']")).getAttribute("innerHTML");
-					String item_amount = getWaitElement(item, By.className("amount")).getAttribute("innerHTML").replaceAll("[^0-9,.+-]*", "");
+					String item_amount = getWaitElement(item, By.className("amount")).getAttribute("innerHTML")
+							.replaceAll("[^0-9,.+-]*", "");
 
-					writer.println("D" + item_date);
-					writer.println("P" + item_lbl);
-					writer.println("T" + item_amount);
-					writer.println("^");
+					listcompte.get(indicelistcomptecurrent).addtran(stringToDateToStringTri(item_date), item_date,
+							item_lbl, item_amount);
+
+					// writer.println("D" + item_date);
+					// writer.println("P" + item_lbl);
+					// writer.println("T" + item_amount);
+					// writer.println("^");
 					nbtran++;
 				}
-				writer.close();
-			}
-			PrintWriter writer = new PrintWriter("tweet_sysout.txt", "UTF-8");
-			writer.println(nbcpt + " comptes et " + nbtran + " transactions recuperées");
-			writer.close();
 
-		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block ² ²
-			e.printStackTrace();
-		} catch (UnsupportedEncodingException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+				// writer.close();
+			}
+
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -373,9 +482,11 @@ public class Scraper {
 	}
 
 	private static void gotourl(WebDriver driver, String url) throws InterruptedException {
-		System.out.println("gotourl" + ":" + url);
-		((WebDriver) driver).get(url);
-		Thread.sleep(5000);
+		if (url != "") {
+			System.out.println("gotourl" + ":" + url);
+			((WebDriver) driver).get(url);
+			Thread.sleep(5000);
+		}
 
 	}
 
@@ -387,9 +498,9 @@ public class Scraper {
 			InputStream resourceBuff1 = Scraper.class.getResourceAsStream("/clavierreferenceing.jsf"); //
 			ImageIcon icon1 = (new ImageIcon(ImageIO.read(resourceBuff1)));
 			BufferedImage img1 = (BufferedImage) icon1.getImage();
-			//display(img1);
+			// display(img1);
 			BufferedImage img2 = WebElementExtender.captureElementPicture(elementkeypad_img);
-			//display(img2);
+			// display(img2);
 
 			for (int l = 0; l <= SequentielPass.length - 1; ++l) {
 				int y1 = 0;
@@ -415,10 +526,12 @@ public class Scraper {
 				int taillex = 40;
 				boolean getout = false;
 				for (int d2 = -1; d2 <= 1 && !getout; ++d2) {
-					BufferedImage img1part = img1.getSubimage((x1 * taillex) - w - ((taillex - w) / 2), (y1 * tailley) - h - ((tailley - h) / 2), w, h);
+					BufferedImage img1part = img1.getSubimage((x1 * taillex) - w - ((taillex - w) / 2),
+							(y1 * tailley) - h - ((tailley - h) / 2), w, h);
 					for (int y2 = 1; y2 <= 2 && !getout; ++y2) {
 						for (int x2 = 1; x2 <= 5 && !getout; ++x2) {
-							BufferedImage img2part = img2.getSubimage(d2 + (x2 * taillex) - w - ((taillex - w) / 2), (y2 * tailley) - h - ((tailley - h) / 2), w, h);
+							BufferedImage img2part = img2.getSubimage(d2 + (x2 * taillex) - w - ((taillex - w) / 2),
+									(y2 * tailley) - h - ((tailley - h) / 2), w, h);
 							double res = imgDiffPercent(img1part, img2part);
 
 							// System.out.println(SequentielPass[l] + " = " + y1
@@ -453,7 +566,8 @@ public class Scraper {
 		return "";
 	}
 
-	public static String clickClavierMobileboursorama(char[] SequentielPass, WebDriver driver, WebElement elementkeypad_img) {
+	public static String clickClavierMobileboursorama(char[] SequentielPass, WebDriver driver,
+			WebElement elementkeypad_img) {
 		System.out.println("clickClavierMobile" + ":");// + SequentielPass);
 		try {
 			String ret = "";
@@ -489,10 +603,12 @@ public class Scraper {
 				int taillex = 100;
 				boolean getout = false;
 				for (int d2 = -1; d2 <= 1 && !getout; ++d2) {
-					BufferedImage img1part = img1.getSubimage((x1 * taillex) - w - ((taillex - w) / 2), (y1 * tailley) - h - ((tailley - h) / 2), w, h);
+					BufferedImage img1part = img1.getSubimage((x1 * taillex) - w - ((taillex - w) / 2),
+							(y1 * tailley) - h - ((tailley - h) / 2), w, h);
 					for (int y2 = 1; y2 <= 4 && !getout; ++y2) {
 						for (int x2 = 1; x2 <= 3 && !getout; ++x2) {
-							BufferedImage img2part = img2.getSubimage(d2 + (x2 * taillex) - w - ((taillex - w) / 2), (y2 * tailley) - h - ((tailley - h) / 2), w, h);
+							BufferedImage img2part = img2.getSubimage(d2 + (x2 * taillex) - w - ((taillex - w) / 2),
+									(y2 * tailley) - h - ((tailley - h) / 2), w, h);
 							double res = imgDiffPercent(img1part, img2part);
 
 							// System.out.println(SequentielPass[l] + " = " + y1
@@ -583,29 +699,17 @@ public class Scraper {
 	}
 
 	private static void bankscrapboursorama(WebDriver driver) {
-		System.out.println("bankscrap" + ":");
-		// TODO Auto-generated method stub
+
 		try {
 			// Thread.sleep(5000);
 			getWaitElement(driver, By.className("account-name"));
-			infocompte[] tabinfocpt = new infocompte[((WebDriver) driver).findElements(By.className("account-name")).size()];
 
-			getallcompte(driver, tabinfocpt);
+			getallcompte(driver);
 
-			getallreffrommonbudget(driver, tabinfocpt);
+			getallreffrommonbudget(driver);
 
-			listetransaction(driver, tabinfocpt);
+			listetransaction(driver);
 
-			PrintWriter writer = new PrintWriter("tweet_sysout.txt", "UTF-8");
-			writer.println(nbcpt + " comptes et " + nbtran + " transactions recuperées");
-			writer.close();
-
-		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block ² ²
-			e.printStackTrace();
-		} catch (UnsupportedEncodingException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -613,7 +717,7 @@ public class Scraper {
 
 	}
 
-	private static void getallreffrommonbudget(WebDriver driver, infocompte[] tabinfocpt) throws InterruptedException {
+	private static void getallreffrommonbudget(WebDriver driver) throws InterruptedException {
 		// correctrion href avec budget
 		if (driver.findElements(By.xpath("//a[@title='Mes services']")).size() != 0) {
 			driver.findElements(By.xpath("//a[@title='Mes services']")).get(0).click();
@@ -626,10 +730,11 @@ public class Scraper {
 			for (WebElement compte : ((WebDriver) driver).findElements(By.xpath(".//div[@class='bd']/ul/li"))) {
 				String amountLabel = getWaitElement(compte, By.className("amountLabel")).getText();
 				if (compte.findElements(By.xpath("//a[@class='selectaccount']")).size() != 0) {
-					String newhref = getWaitElement(compte, By.xpath(".//a[@class='selectaccount']")).getAttribute("href");
-					for (int i = 0; i < nbcpt; i++) {
-						if (tabinfocpt[i].compte_account_number.equals(amountLabel)) {
-							tabinfocpt[i].href = newhref;
+					String newhref = getWaitElement(compte, By.xpath(".//a[@class='selectaccount']"))
+							.getAttribute("href");
+					for (InfoCompte cpt : listcompte) {
+						if (cpt.compte_account_number.equals(amountLabel)) {
+							cpt.href = newhref;
 						}
 					}
 				}
@@ -637,57 +742,74 @@ public class Scraper {
 		}
 	}
 
-	private static void getallcompte(WebDriver driver, infocompte[] tabinfocpt) throws InterruptedException {
-		nbcpt = 0;
+	private static void getallcompte(WebDriver driver) throws InterruptedException {
+
+		// nbcpt = 0;
 		for (WebElement compte : ((WebDriver) driver).findElements(By.className("account-name"))) {
 			// String compte_title = getWaitElement(compte,
 			// By.className("title")).getAttribute("innerHTML");
-			tabinfocpt[nbcpt] = new infocompte();
-			tabinfocpt[nbcpt].compte_title = getWaitElement(compte, By.className("label")).getText();
+
+			InfoCompte currentcpt = new InfoCompte();
+			currentcpt.compte_title = getWaitElement(compte, By.className("label")).getText();
 			// String compte_account_owner = getWaitElement(compte,
 			// By.className("account-owner")).getAttribute("innerHTML");
-			String[] tmp = tabinfocpt[nbcpt].compte_title.split(" ");
-			tabinfocpt[nbcpt].compte_lbl = tmp[0];
+			String[] tmp = currentcpt.compte_title.split(" ");
+			currentcpt.compte_lbl = tmp[0];
 			if (tmp.length == 2) {
-				tabinfocpt[nbcpt].compte_account_owner = tmp[1];
+				currentcpt.compte_account_owner = tmp[1];
 			}
 			if (tmp.length == 3) {
-				tabinfocpt[nbcpt].compte_lbl = tabinfocpt[nbcpt].compte_lbl + " " + tmp[1];
-				tabinfocpt[nbcpt].compte_account_owner = tmp[2];
+				currentcpt.compte_lbl = currentcpt.compte_lbl + " " + tmp[1];
+				currentcpt.compte_account_owner = tmp[2];
 			}
 
 			if (compte.findElements(By.className("tooltip")).size() != 0) {
 
-				String tmpcompte_account_number = getWaitElement(compte, By.className("tooltip")).getAttribute("onclick");
+				String tmpcompte_account_number = getWaitElement(compte, By.className("tooltip"))
+						.getAttribute("onclick");
 				Pattern p = Pattern.compile("('[^']*')+");
 				Matcher m = p.matcher(tmpcompte_account_number);
-				tabinfocpt[nbcpt].compte_account_number = "";
+				currentcpt.compte_account_number = "";
 				while (m.find()) {
 					tmp = m.group(1).split(" ");
 					if (tmp.length > 2) {
-						tabinfocpt[nbcpt].compte_account_number = tmp[2];
+						currentcpt.compte_account_number = tmp[2];
 					}
 				}
 			}
 
-			tabinfocpt[nbcpt].href = getWaitElement(compte, By.xpath(".//span[@class='label']/a")).getAttribute("href");
+			currentcpt.href = (getWaitElement(compte, By.xpath(".//span[@class='label']/a")).getAttribute("href"));
 
-			if (tabinfocpt[nbcpt].compte_account_owner.equals("")) {
-				tabinfocpt[nbcpt].compte_account_owner = tabinfocpt[nbcpt].compte_lbl;
+			if (currentcpt.compte_account_owner.equals("")) {
+				currentcpt.compte_account_owner = currentcpt.compte_lbl;
 				if (compte.findElements(By.xpath(".//div")).size() != 0) {
 					tmp = compte.findElements(By.xpath(".//div")).get(0).getText().split("-");
-					tabinfocpt[nbcpt].compte_lbl = tmp[0].trim();
-					tabinfocpt[nbcpt].compte_title = tabinfocpt[nbcpt].compte_lbl + " " + tabinfocpt[nbcpt].compte_account_owner;
-					tabinfocpt[nbcpt].compte_account_number = tmp[1].trim();
+					currentcpt.compte_lbl = tmp[0].trim();
+					currentcpt.compte_title = currentcpt.compte_lbl + " " + currentcpt.compte_account_owner;
+					currentcpt.compte_account_number = tmp[1].trim();
 				}
 			}
-			System.out.println("compte_account_number" + ":" + tabinfocpt[nbcpt].compte_title + " " + tabinfocpt[nbcpt].compte_account_number);
-			nbcpt++;
+			System.out.println(
+					"compte_account_number" + ":" + currentcpt.compte_title + " " + currentcpt.compte_account_number);
+
+			indicelistcomptecurrent = -1;
+			for (int i = 0; i < listcompte.size() - 1; i++) {
+				if (listcompte.get(i).compte_account_number.equals(currentcpt.compte_account_number)) {
+					listcompte.get(i).maj(currentcpt);
+					indicelistcomptecurrent = i;
+				}
+			}
+			if (indicelistcomptecurrent == -1) {
+				listcompte.add(currentcpt);
+				indicelistcomptecurrent = listcompte.size() - 1;
+			}
+
+			// nbcpt++;
 
 		}
 	}
 
-	private static void listetransaction(WebDriver driver, infocompte[] tabinfocpt) {
+	private static void listetransaction(WebDriver driver) {
 		// TODO Auto-generated method stub
 
 		try {
@@ -695,89 +817,99 @@ public class Scraper {
 			SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
 			String DateToStr = format.format(curDate);
 
-			for (infocompte infocpt : tabinfocpt) {
+			// for (infocompte infocpt : tabinfocpt) {
+			for (indicelistcomptecurrent = 0; indicelistcomptecurrent < listcompte.size()
+					- 1; indicelistcomptecurrent++) {
+				InfoCompte infocpt = listcompte.get(indicelistcomptecurrent);
+				if (infocpt.href != "") {
 
-				System.out.println("transaction of compte_account_number" + ":" + infocpt.compte_title + " " + infocpt.compte_account_number);
+					System.out.println("transaction of compte_account_number" + ":" + infocpt.compte_title + " "
+							+ infocpt.compte_account_number);
 
-				PrintWriter writer;
-				writer = new PrintWriter("qif " + infocpt.compte_account_number + " " + infocpt.compte_title + " " + DateToStr + ".qif", "UTF-8");
-
-				writer.println("!Type:Bank");
-
-				gotourl(driver, infocpt.href);
-				waitForPageLoaded(driver);
-
-				if (((WebDriver) driver).findElements(By.id("racine_ma-banque2_synthese_epargne_mouvements")).size() != 0) {
-
-					Date cDate = new Date();
-					Calendar c = Calendar.getInstance();
-					SimpleDateFormat formatmm1 = new SimpleDateFormat("'?month='MM'&year='yyyy");
-					String comphref;
-
-					((WebDriver) driver).findElements(By.id("racine_ma-banque2_synthese_epargne_mouvements")).get(0).click();
+					gotourl(driver, infocpt.href);
 					waitForPageLoaded(driver);
-					writealltransaction(driver, writer);
 
-					// mois -1
-					c.setTime(cDate);
-					c.add(Calendar.MONTH, -1);
-					comphref = formatmm1.format(c.getTime());
-					((WebDriver) driver).findElements(By.xpath("//a[@href='" + comphref + "']")).get(0).click();
-					// https://www.boursorama.com/comptes/epargne/mouvements.phtml?month=10&year=2015
-					// https://www.boursorama.com/comptes/epargne/mouvements.phtml?month=11&year=2015
+					if (((WebDriver) driver).findElements(By.id("racine_ma-banque2_synthese_epargne_mouvements"))
+							.size() != 0) {
 
-					waitForPageLoaded(driver);
-					writealltransaction(driver, writer);
+						Date cDate = new Date();
+						Calendar c = Calendar.getInstance();
+						SimpleDateFormat formatmm1 = new SimpleDateFormat("'?month='MM'&year='yyyy");
+						String comphref;
 
-					// mois -2
-					c.setTime(cDate);
-					c.add(Calendar.MONTH, -2);
-					comphref = formatmm1.format(c.getTime());
-					((WebDriver) driver).findElements(By.xpath("//a[@href='" + comphref + "']")).get(0).click();
-					waitForPageLoaded(driver);
-					writealltransaction(driver, writer);
+						((WebDriver) driver).findElements(By.id("racine_ma-banque2_synthese_epargne_mouvements")).get(0)
+								.click();
+						waitForPageLoaded(driver);
+						writealltransaction(driver, infocpt);
 
-				} else {
-					if (((WebDriver) driver).findElements(By.className("account-on")).size() == 1) {
-						writealltransaction(driver, writer);
+						// mois -1
+						c.setTime(cDate);
+						c.add(Calendar.MONTH, -1);
+						comphref = formatmm1.format(c.getTime());
+						((WebDriver) driver).findElements(By.xpath("//a[@href='" + comphref + "']")).get(0).click();
+						// https://www.boursorama.com/comptes/epargne/mouvements.phtml?month=10&year=2015
+						// https://www.boursorama.com/comptes/epargne/mouvements.phtml?month=11&year=2015
+
+						waitForPageLoaded(driver);
+						writealltransaction(driver, infocpt);
+
+						// mois -2
+						c.setTime(cDate);
+						c.add(Calendar.MONTH, -2);
+						comphref = formatmm1.format(c.getTime());
+						((WebDriver) driver).findElements(By.xpath("//a[@href='" + comphref + "']")).get(0).click();
+						waitForPageLoaded(driver);
+						writealltransaction(driver, infocpt);
+
+					} else {
+						if (((WebDriver) driver).findElements(By.className("account-on")).size() == 1) {
+							writealltransaction(driver, infocpt);
+						}
 					}
+					// writer.close();
 				}
-				writer.close();
-
 			}
-		} catch (FileNotFoundException | UnsupportedEncodingException | InterruptedException e) {
+		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
 
-	private static void writealltransaction(WebDriver driver, PrintWriter writer) throws InterruptedException {
-		for (WebElement item : ((WebDriver) driver)
-				.findElements(By.xpath(".//div[@id='content-gauche']/form/div/div[@class='bd']//table/tbody//tr[not(contains(@class, 'total'))]"))) {
-			String item_date = stringToDateToString(getWaitElement(item, By.className("dateValeur")).getAttribute("innerHTML"));
-			String item_lbl = getWaitElement(item, By.xpath(".//td[contains(@class,'label')]//span[not(contains(@class, 'DateOperation'))]")).getAttribute("innerHTML");
-			String item_amount = getWaitElement(item, By.className("amount")).getAttribute("innerHTML").replaceAll("[^0-9,.+-]*", "");
+	private static void writealltransaction(WebDriver driver, InfoCompte currentcpt) throws InterruptedException {
+		for (WebElement item : ((WebDriver) driver).findElements(By.xpath(
+				".//div[@id='content-gauche']/form/div/div[@class='bd']//table/tbody//tr[not(contains(@class, 'total'))]"))) {
+			String item_date = stringToDateToString(
+					getWaitElement(item, By.className("dateValeur")).getAttribute("innerHTML"));
+			String item_lbl = getWaitElement(item,
+					By.xpath(".//td[contains(@class,'label')]//span[not(contains(@class, 'DateOperation'))]"))
+							.getAttribute("innerHTML");
+			String item_amount = getWaitElement(item, By.className("amount")).getAttribute("innerHTML")
+					.replaceAll("[^0-9,.+-]*", "");
 
-			writer.println("D" + item_date);
-			writer.println("P" + item_lbl);
-			writer.println("T" + item_amount);
-			writer.println("^");
-			nbtran++;
+			currentcpt.addtran(stringToDateToStringTri(item_date), item_date, item_lbl, item_amount);
+			// writer.println("D" + item_date);
+			// writer.println("P" + item_lbl);
+			// writer.println("T" + item_amount);
+			// writer.println("^");
+			// nbtran++;
 		}
 
 		String item_date = "";
-		for (WebElement item : ((WebDriver) driver).findElements(By.xpath(".//tbody[@id='liste-operations-page']/tr[not(contains(@class, 'form_line'))]"))) {
+		for (WebElement item : ((WebDriver) driver).findElements(
+				By.xpath(".//tbody[@id='liste-operations-page']/tr[not(contains(@class, 'form_line'))]"))) {
 			if (item.findElements(By.xpath(".//td")).size() == 1) {
 				item_date = stringToDateToString2(getWaitElement(item, By.xpath(".//td")).getText());
 			} else {
 				String item_lbl = getWaitElement(item, By.className("userLabel")).getText();
-				String item_amount = getWaitElement(item, By.xpath(".//span[@class='varup' or @class='vardown']")).getText().replaceAll("[^0-9,.+-]*", "");
+				String item_amount = getWaitElement(item, By.xpath(".//span[@class='varup' or @class='vardown']"))
+						.getText().replaceAll("[^0-9,.+-]*", "");
 
-				writer.println("D" + item_date);
-				writer.println("P" + item_lbl);
-				writer.println("T" + item_amount);
-				writer.println("^");
-				nbtran++;
+				currentcpt.addtran(stringToDateToStringTri(item_date), item_date, item_lbl, item_amount);
+				// writer.println("D" + item_date);
+				// writer.println("P" + item_lbl);
+				// writer.println("T" + item_amount);
+				// writer.println("^");
+				// nbtran++;
 			}
 		}
 	}
@@ -787,8 +919,32 @@ public class Scraper {
 		Date d = null;
 		String dout = "";
 		try {
-			SimpleDateFormat formatter = new SimpleDateFormat("dd/MM/yyyy");
+			// boursorama// SimpleDateFormat formatter = new
+			// SimpleDateFormat("dd/MM/yyyy");
+			SimpleDateFormat formatter = new SimpleDateFormat("dd MMM yyyy");// ing
+																				// chrome
+																				// 01/02/2016
 			SimpleDateFormat formatterout = new SimpleDateFormat("dd/MM/yyyy");
+			ParsePosition pos = new ParsePosition(0);
+			d = formatter.parse(sDate, pos);
+			dout = formatterout.format(d);
+		} catch (RuntimeException e) {
+			e.printStackTrace();
+		}
+		return dout;
+	}
+
+	public static String stringToDateToStringTri(String sDate) {
+		System.out.println("stringToDateToString" + ":" + sDate);
+		Date d = null;
+		String dout = "";
+		try {
+			// boursorama// SimpleDateFormat formatter = new
+			// SimpleDateFormat("dd/MM/yyyy");
+			SimpleDateFormat formatter = new SimpleDateFormat("dd/MM/yyyy");// ing
+																			// chrome
+																			// 01/02/2016
+			SimpleDateFormat formatterout = new SimpleDateFormat("yyyy-MM-dd");
 			ParsePosition pos = new ParsePosition(0);
 			d = formatter.parse(sDate, pos);
 			dout = formatterout.format(d);
@@ -837,26 +993,28 @@ public class Scraper {
 		return dout;
 	}
 
-	private static void GetParamBank(infoBank[] tabBank) {
+	private static void GetParamBank(List<infoBank> bank2) {
 
 		try {
-			Bank[0] = new infoBank();
-			Bank[0].title = "ing";
-			Bank[0].loggintextbox = "zone1Form:numClient";
-			Bank[0].validefirst = "zone1Form:submit";
-			Bank[0].validesecond = "mrc:mrg";
-			Bank[0].displayLogin = "digitpaddisplayLogin";
+//			infoBank ing = new infoBank();
+//			ing.title = "ing";
+//			ing.loggintextbox = "zone1Form:numClient";
+//			ing.validefirst = "zone1Form:submit";
+//			ing.validesecond = "mrc:mrg";
+//			ing.displayLogin = "digitpaddisplayLogin";
+//			Bank.add(ing);
 
-			Bank[1] = new infoBank();
-			Bank[1].title = "boursorama";
-			Bank[1].loggintextbox = "login";
-			Bank[1].validefirst = "";
-			Bank[1].validesecond = "btn-submit";
-			Bank[1].displayLogin = "";
+			infoBank Bours = new infoBank();
+			Bours.title = "boursorama";
+			Bours.loggintextbox = "login";
+			Bours.validefirst = "";
+			Bours.validesecond = "btn-submit";
+			Bours.displayLogin = "";
+			Bank.add(Bours);
 
 			for (infoBank bk : Bank) {
 				propssecret = new Properties();
-				String rep = props.getProperty("repertoire_secret");
+				String rep = app.getString("repertoire_secret");
 				rep = rep.replace("~", System.getProperty("user.home"));
 				if (SystemUtils.IS_OS_WINDOWS) {
 					rep = rep.replace("/", "\\");
@@ -887,12 +1045,4 @@ class infoBank {
 	String validesecond = "";
 	String displayLogin = "";
 	String url = "";
-}
-
-class infocompte {
-	String compte_title = "";
-	String compte_lbl = "";
-	String compte_account_number = "";
-	String compte_account_owner = "";
-	String href = "";
 }

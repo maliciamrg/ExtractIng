@@ -13,9 +13,8 @@ $logger_cmd "$((java -jar /mnt/diablo/kitchen/source_code/.tarpit/extractIng.jar
 $logger_cmd "stop java"
 sleep 5
 if [ -f ./tweet_sysout.txt ]; then
-	line=$(head -n 1 ./tweet_sysout.txt)
-	tweet $0 $line
+	line=$(head -n 1 ./tweet_sysout.txt | iconv -f utf-8 -t us-ascii//TRANSLIT)
+	$logger_cmd "$(tweet $0 $line)"
 	$logger_cmd "$line"
-	rm ./tweet_sysout.txt
 fi
 $logger_cmd "$(sh xvfb.sh stop 97)"
