@@ -64,7 +64,12 @@ public class Scraper {
 		try {
 
 			GetParamBank(Bank);
+			if (SystemUtils.IS_OS_LINUX) {
+			System.setProperty("webdriver.chrome.driver", "chromedriver");
+			}
+			if (SystemUtils.IS_OS_WINDOWS) {
 			System.setProperty("webdriver.chrome.driver", "chromedriver.exe");
+			}
 
 			listcompte = readDataFiles();
 			for (infoBank bk : Bank) {
